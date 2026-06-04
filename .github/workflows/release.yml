@@ -16,20 +16,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Qt and MinGW via aqtinstall
+      - name: Install Qt via aqtinstall
         run: |
           pip install aqtinstall
           aqt install-qt windows desktop 6.7.3 win64_mingw -O "${{ github.workspace }}\Qt"
-          aqt install-tool windows desktop tools_mingw90 qt.tools.mingw90 -O "${{ github.workspace }}\Qt"
           echo "${{ github.workspace }}\Qt\6.7.3\mingw_64\bin" >> $env:GITHUB_PATH
-          echo "${{ github.workspace }}\Qt\Tools\mingw90_64\bin" >> $env:GITHUB_PATH
           echo "CMAKE_PREFIX_PATH=${{ github.workspace }}\Qt\6.7.3\mingw_64" >> $env:GITHUB_ENV
 
-      - name: Install Ninja
-        run: pip install ninja
+      - name: Add MSYS2 MinGW and Ninja to PATH
+        run: |
+          echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
+          pip install ninja
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.7.3\mingw_64"
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.7.3\mingw_64" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
 
       - name: Build
         run: cmake --build build --config Release
