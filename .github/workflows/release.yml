@@ -12,18 +12,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.7.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2022_64'
+          arch: 'win64_mingw'
+          tools: 'tools_mingw90'
           cache: true
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      - name: Add MinGW to PATH
+        run: |
+          $mingwPath = "${{ env.IQTA_TOOLS }}\mingw90_64\bin"
+          if (Test-Path $mingwPath) {
+            echo "$mingwPath" >> $env:GITHUB_PATH
+          } else {
+            echo "${{ env.QT_ROOT_DIR }}\..\..\..\Tools\mingw90_64\bin" >> $env:GITHUB_PATH
+          }
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -33,8 +43,8 @@ jobs:
 
       - name: Deploy Qt dependencies
         run: |
-          mkdir deploy
-          copy build\GaltonBoardSimulator.exe deploy\
+          New-Item -ItemType Directory -Force deploy | Out-Null
+          Copy-Item build\GaltonBoardSimulator.exe deploy\
           windeployqt --release --no-translations deploy\GaltonBoardSimulator.exe
 
       - name: Package
@@ -99,7 +109,7 @@ jobs:
       - name: Generate icon
         run: |
           python3 - <<'EOF'
-          import struct, zlib, base64
+          import struct, zlib
 
           def png_chunk(tag, data):
               c = zlib.crc32(tag + data) & 0xffffffff
@@ -121,15 +131,8 @@ jobs:
                       row += b'\x00\x00\x00\x00'
               img.append(row)
 
-          import io
-          raw = b''.join(zlib.compress(row, 9) for row in img)
-
-          def deflate_rows(rows):
-              buf = b''.join(rows)
-              return zlib.compress(buf, 9)
-
-          raw2 = deflate_rows(img)
-          ihdr = struct.pack('>IIBBBBB', W, H, 8, 2 if False else 6, 0, 0, 0)
+          raw2 = zlib.compress(b''.join(img), 9)
+          ihdr = struct.pack('>IIBBBBB', W, H, 8, 6, 0, 0, 0)
           data = b'\x89PNG\r\n\x1a\n'
           data += png_chunk(b'IHDR', ihdr)
           data += png_chunk(b'IDAT', raw2)
@@ -152,22 +155,19 @@ jobs:
           EOF
 
       - name: Build AppImage
-        env:
-          QMAKE: ${{ env.Qt6_DIR }}/bin/qmake
-          OUTPUT: GaltonBoardSimulator-linux-x86_64.AppImage
         run: |
+          export QMAKE="${{ env.QT_ROOT_DIR }}/bin/qmake"
           export QML_SOURCES_PATHS=.
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --plugin qt \
             --output appimage
-          mv GaltonBoardSimulator-linux-x86_64.AppImage GaltonBoardSimulator-linux-x86_64.AppImage || true
           ls -la *.AppImage
 
       - name: Rename AppImage
         run: |
-          APPIMG=$(ls *.AppImage | head -1)
-          if [ "$APPIMG" != "GaltonBoardSimulator-linux-x86_64.AppImage" ]; then
+          APPIMG=$(ls *.AppImage | grep -v linuxdeploy | head -1)
+          if [ -n "$APPIMG" ] && [ "$APPIMG" != "GaltonBoardSimulator-linux-x86_64.AppImage" ]; then
             mv "$APPIMG" GaltonBoardSimulator-linux-x86_64.AppImage
           fi
 
