@@ -16,27 +16,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.7.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          tools: 'tools_mingw90'
-          cache: true
-
-      - name: Add MinGW to PATH
+      - name: Install Qt and MinGW via aqtinstall
         run: |
-          $mingwPath = "${{ env.IQTA_TOOLS }}\mingw90_64\bin"
-          if (Test-Path $mingwPath) {
-            echo "$mingwPath" >> $env:GITHUB_PATH
-          } else {
-            echo "${{ env.QT_ROOT_DIR }}\..\..\..\Tools\mingw90_64\bin" >> $env:GITHUB_PATH
-          }
+          pip install aqtinstall
+          aqt install-qt windows desktop 6.7.3 win64_mingw -O "${{ github.workspace }}\Qt"
+          aqt install-tool windows desktop tools_mingw90 qt.tools.mingw90 -O "${{ github.workspace }}\Qt"
+          echo "${{ github.workspace }}\Qt\6.7.3\mingw_64\bin" >> $env:GITHUB_PATH
+          echo "${{ github.workspace }}\Qt\Tools\mingw90_64\bin" >> $env:GITHUB_PATH
+          echo "CMAKE_PREFIX_PATH=${{ github.workspace }}\Qt\6.7.3\mingw_64" >> $env:GITHUB_ENV
+
+      - name: Install Ninja
+        run: pip install ninja
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.7.3\mingw_64"
 
       - name: Build
         run: cmake --build build --config Release
@@ -45,7 +38,15 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force deploy | Out-Null
           Copy-Item build\GaltonBoardSimulator.exe deploy\
-          windeployqt --release --no-translations deploy\GaltonBoardSimulator.exe
+          & "${{ github.workspace }}\Qt\6.7.3\mingw_64\bin\windeployqt.exe" --release --no-translations deploy\GaltonBoardSimulator.exe
+
+      - name: Copy MinGW runtime DLLs
+        run: |
+          $mingwBin = "${{ github.workspace }}\Qt\Tools\mingw90_64\bin"
+          foreach ($dll in @("libgcc_s_seh-1.dll","libstdc++-6.dll","libwinpthread-1.dll")) {
+            $src = Join-Path $mingwBin $dll
+            if (Test-Path $src) { Copy-Item $src deploy\ }
+          }
 
       - name: Package
         run: Compress-Archive -Path deploy\* -DestinationPath GaltonBoardSimulator-windows-x64.zip
