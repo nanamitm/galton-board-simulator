@@ -1,0 +1,25 @@
+# ビルド成果物
+build/
+cmake-build-*/
+out/
+
+# CMake キャッシュ
+CMakeUserPresets.json
+
+# Qt Creator
+*.pro.user
+*.qbs.user
+*.creator
+*.creator.user
+*.qmlproject.user
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
