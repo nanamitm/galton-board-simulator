@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Deploy Qt dependencies
+        run: |
+          mkdir deploy
+          copy build\GaltonBoardSimulator.exe deploy\
+          windeployqt --release --no-translations deploy\GaltonBoardSimulator.exe
+
+      - name: Package
+        run: Compress-Archive -Path deploy\* -DestinationPath GaltonBoardSimulator-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: GaltonBoardSimulator-windows-x64.zip
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev \
+            libfuse2 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-x11-0 \
+            ninja-build
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Download linuxdeploy tools
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+
+      - name: Create AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          cp build/GaltonBoardSimulator AppDir/usr/bin/
+
+      - name: Generate icon
+        run: |
+          python3 - <<'EOF'
+          import struct, zlib, base64
+
+          def png_chunk(tag, data):
+              c = zlib.crc32(tag + data) & 0xffffffff
+              return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', c)
+
+          W = H = 256
+          img = []
+          cx, cy, r_out, r_in = W//2, H//2, 110, 75
+          for y in range(H):
+              row = b'\x00'
+              for x in range(W):
+                  dx, dy = x - cx, y - cy
+                  d = (dx*dx + dy*dy) ** 0.5
+                  if r_in <= d <= r_out:
+                      t = 1.0 - abs(d - (r_out+r_in)/2) / ((r_out-r_in)/2)
+                      a = int(t * 220)
+                      row += bytes([0, 168, 130, a])
+                  else:
+                      row += b'\x00\x00\x00\x00'
+              img.append(row)
+
+          import io
+          raw = b''.join(zlib.compress(row, 9) for row in img)
+
+          def deflate_rows(rows):
+              buf = b''.join(rows)
+              return zlib.compress(buf, 9)
+
+          raw2 = deflate_rows(img)
+          ihdr = struct.pack('>IIBBBBB', W, H, 8, 2 if False else 6, 0, 0, 0)
+          data = b'\x89PNG\r\n\x1a\n'
+          data += png_chunk(b'IHDR', ihdr)
+          data += png_chunk(b'IDAT', raw2)
+          data += png_chunk(b'IEND', b'')
+          with open('AppDir/usr/share/icons/hicolor/256x256/apps/GaltonBoardSimulator.png', 'wb') as f:
+              f.write(data)
+          print('Icon written')
+          EOF
+
+      - name: Create desktop file
+        run: |
+          cat > AppDir/usr/share/applications/GaltonBoardSimulator.desktop << 'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Galton Board Simulator
+          Exec=GaltonBoardSimulator
+          Icon=GaltonBoardSimulator
+          Categories=Science;Education;
+          Comment=Galton Board physics simulator visualizing binomial distribution
+          EOF
+
+      - name: Build AppImage
+        env:
+          QMAKE: ${{ env.Qt6_DIR }}/bin/qmake
+          OUTPUT: GaltonBoardSimulator-linux-x86_64.AppImage
+        run: |
+          export QML_SOURCES_PATHS=.
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --plugin qt \
+            --output appimage
+          mv GaltonBoardSimulator-linux-x86_64.AppImage GaltonBoardSimulator-linux-x86_64.AppImage || true
+          ls -la *.AppImage
+
+      - name: Rename AppImage
+        run: |
+          APPIMG=$(ls *.AppImage | head -1)
+          if [ "$APPIMG" != "GaltonBoardSimulator-linux-x86_64.AppImage" ]; then
+            mv "$APPIMG" GaltonBoardSimulator-linux-x86_64.AppImage
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: GaltonBoardSimulator-linux-x86_64.AppImage
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-appimage
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            GaltonBoardSimulator-windows-x64.zip
+            GaltonBoardSimulator-linux-x86_64.AppImage
