@@ -99,9 +99,10 @@ void SimulationWidget::setElasticity(double e)
     m_elasticity = qBound(0.0, e, 1.0);
 }
 
-void SimulationWidget::setBallSize(double size)
+void SimulationWidget::setBallSize(double factor)
 {
-    m_ballSize = size;
+    m_ballSizeFactor = qBound(0.5, factor, 2.0);
+    m_ballSize = qMax(3.0, m_pegSpacing * 0.18 * m_ballSizeFactor);
 }
 
 void SimulationWidget::setSimulationSpeed(int speed)
@@ -137,25 +138,48 @@ void SimulationWidget::initializeBoard()
     // 間隔の最大値を 23.0 まで小さく抑え、非常に密なピン配置を維持します
     m_pegSpacing = qBound(12.0, m_pegSpacing, 23.0);
 
-    // ボールとピンのサイズを間隔に比例して自動スケーリング (安定した物理を確保)
-    m_ballSize = qMax(3.0, m_pegSpacing * 0.18);
+    // ボールとピンのサイズを間隔に比例して自動スケーリング (ユーザー倍率を反映)
+    m_ballSize = qMax(3.0, m_pegSpacing * 0.18 * m_ballSizeFactor);
     double pegRadius = qMax(1.2, m_pegSpacing * 0.08);
 
     double centerX = width() / 2.0;
     double H = m_pegSpacing * 0.866; // 高さ
 
     if (m_pegLayout == Triangle) {
-        // ピン（釘）の配置：正三角形グリッド
+        // 台形配置：各行の三角形ピンの両端に kSlotMargin 個のバッファピンを追加。
+        // 物理的には台形だが中央の三角形部分のみ通常表示し、端は半透明。
         for (int r = 0; r < m_rowCount; ++r) {
-            int pegCount = r + 1;
-            double startX = centerX - (r * m_pegSpacing) / 2.0;
+            int centralPins = r + 1;
+            double centralStartX = centerX - (r * m_pegSpacing) / 2.0;
             double y = m_topMargin + r * H;
 
-            for (int c = 0; c < pegCount; ++c) {
+            // 左バッファピン
+            for (int m = kSlotMargin; m >= 1; --m) {
                 Peg peg;
-                peg.pos = QPointF(startX + c * m_pegSpacing, y);
+                peg.pos = QPointF(centralStartX - m * m_pegSpacing, y);
                 peg.radius = pegRadius;
                 peg.glowIntensity = 0.0;
+                peg.isMargin = true;
+                m_pegs.push_back(peg);
+            }
+
+            // 中央（三角形）ピン
+            for (int c = 0; c < centralPins; ++c) {
+                Peg peg;
+                peg.pos = QPointF(centralStartX + c * m_pegSpacing, y);
+                peg.radius = pegRadius;
+                peg.glowIntensity = 0.0;
+                peg.isMargin = false;
+                m_pegs.push_back(peg);
+            }
+
+            // 右バッファピン
+            for (int m = 1; m <= kSlotMargin; ++m) {
+                Peg peg;
+                peg.pos = QPointF(centralStartX + (centralPins - 1 + m) * m_pegSpacing, y);
+                peg.radius = pegRadius;
+                peg.glowIntensity = 0.0;
+                peg.isMargin = true;
                 m_pegs.push_back(peg);
             }
         }
@@ -260,16 +284,16 @@ void SimulationWidget::updateSimulation()
 
     double dt = 0.016; // 60 FPS 基準
 
-    // スピード倍率に応じて物理演算を複数回回す
-    for (int step = 0; step < m_simulationSpeed; ++step) {
-        // ボールの生成処理
-        m_spawnAccumulatorMs += 16;
-        int spawnIntervalMs = 1000 / m_ballDropRate;
-        if (m_spawnAccumulatorMs >= spawnIntervalMs) {
-            spawnBall();
-            m_spawnAccumulatorMs = 0;
-        }
+    // ボール生成は実時間ベースで1フレームに1回（シミュ速度に乗算しない）
+    m_spawnAccumulatorMs += 16;
+    int spawnIntervalMs = 1000 / m_ballDropRate;
+    if (m_spawnAccumulatorMs >= spawnIntervalMs) {
+        spawnBall();
+        m_spawnAccumulatorMs = 0;
+    }
 
+    // 物理演算のみシミュ速度倍率分繰り返す
+    for (int step = 0; step < m_simulationSpeed; ++step) {
         updatePhysics(dt);
         checkCollisions(dt);
     }
@@ -411,22 +435,22 @@ void SimulationWidget::paintEvent(QPaintEvent *event)
 
     // 3. ピンの描画
     for (const auto &peg : m_pegs) {
-        if (peg.glowIntensity > 0.0) {
-            // 衝突時のネオンカラー発光
+        int alpha = peg.isMargin ? 70 : 255; // バッファピンは半透明
+
+        if (peg.glowIntensity > 0.0 && !peg.isMargin) {
             drawGlowEffect(painter, peg.pos, peg.radius, QColor(0, 200, 160), peg.glowIntensity);
         }
 
-        // ピン本体の描画
         QRadialGradient pegGrad(peg.pos, peg.radius);
-        if (peg.glowIntensity > 0.0) {
-            pegGrad.setColorAt(0.0, QColor(220, 220, 220));
-            pegGrad.setColorAt(1.0, QColor(0, 200, 160));
+        if (peg.glowIntensity > 0.0 && !peg.isMargin) {
+            pegGrad.setColorAt(0.0, QColor(220, 220, 220, alpha));
+            pegGrad.setColorAt(1.0, QColor(0, 200, 160, alpha));
         } else {
-            pegGrad.setColorAt(0.0, QColor(180, 180, 200));
-            pegGrad.setColorAt(1.0, QColor(70, 70, 80));
+            pegGrad.setColorAt(0.0, QColor(180, 180, 200, alpha));
+            pegGrad.setColorAt(1.0, QColor(70, 70, 80, alpha));
         }
         painter.setBrush(pegGrad);
-        painter.setPen(QPen(QColor(30, 30, 40), 0.5));
+        painter.setPen(QPen(QColor(30, 30, 40, alpha), 0.5));
         painter.drawEllipse(peg.pos, peg.radius, peg.radius);
     }
 

@@ -25,6 +25,7 @@ struct Peg {
     QPointF pos;
     double radius;
     double glowIntensity = 0.0; // 衝突時の光る強さ (0.0 〜 1.0)
+    bool isMargin = false;      // 台形バッファ領域のピン（半透明表示）
 };
 
 class SimulationWidget : public QWidget
@@ -53,7 +54,7 @@ public:
     void setElasticity(double e);
     double elasticity() const { return m_elasticity; }
 
-    void setBallSize(double size);
+    void setBallSize(double factor); // 自動サイズへの倍率 (0.5〜2.0)
     double ballSize() const { return m_ballSize; }
 
     void setSimulationSpeed(int speed); // 1x, 2x, 5x, 10x
@@ -102,7 +103,8 @@ private:
     int m_ballDropRate = 5; // balls/sec
     double m_gravity = 350.0; // pixels/sec^2
     double m_elasticity = 0.5; // 反発係数
-    double m_ballSize = 6.0;   // ボール半径
+    double m_ballSize = 6.0;       // ボール半径（initializeBoard が自動計算）
+    double m_ballSizeFactor = 1.0; // ユーザー指定の倍率
     double m_biasProbability = 0.5; // 右に進む確率
 
     // 構成要素

@@ -88,7 +88,7 @@ void MainWindow::setupUI()
 
     // ボール生成速度
     m_dropRateSlider = new QSlider(Qt::Horizontal, paramGroup);
-    m_dropRateSlider->setRange(1, 20);
+    m_dropRateSlider->setRange(1, 50);
     m_dropRateSlider->setValue(5);
     m_dropRateValueLabel = new QLabel("5個/秒", paramGroup);
     m_dropRateValueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -141,6 +141,20 @@ void MainWindow::setupUI()
     biasSliderLayout->addWidget(m_biasSlider);
     biasSliderLayout->addWidget(m_biasValueLabel);
     paramLayout->addRow("右確率 p:", biasSliderLayout);
+
+    // ボールサイズ
+    m_ballSizeSlider = new QSlider(Qt::Horizontal, paramGroup);
+    m_ballSizeSlider->setRange(50, 200);
+    m_ballSizeSlider->setValue(100);
+    m_ballSizeValueLabel = new QLabel("1.00x", paramGroup);
+    m_ballSizeValueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_ballSizeValueLabel->setFixedWidth(45);
+    connect(m_ballSizeSlider, &QSlider::valueChanged, this, &MainWindow::onBallSizeChanged);
+
+    QHBoxLayout *ballSizeSliderLayout = new QHBoxLayout();
+    ballSizeSliderLayout->addWidget(m_ballSizeSlider);
+    ballSizeSliderLayout->addWidget(m_ballSizeValueLabel);
+    paramLayout->addRow("ボールサイズ:", ballSizeSliderLayout);
 
     // シミュレーション速度
     m_speedCombo = new QComboBox(paramGroup);
@@ -361,6 +375,7 @@ void MainWindow::saveParams()
     s.setValue("gravity",    m_gravitySlider->value());
     s.setValue("elasticity", m_elasticitySlider->value());
     s.setValue("bias",       m_biasSlider->value());
+    s.setValue("ballSize",   m_ballSizeSlider->value());
     s.setValue("speed",      m_speedCombo->currentIndex());
     s.setValue("layout",     m_layoutCombo->currentIndex());
 }
@@ -375,6 +390,7 @@ void MainWindow::loadParams()
     m_gravitySlider->setValue(   s.value("gravity",   350).toInt());
     m_elasticitySlider->setValue(s.value("elasticity", 50).toInt());
     m_biasSlider->setValue(      s.value("bias",       50).toInt());
+    m_ballSizeSlider->setValue(  s.value("ballSize", 100).toInt());
     m_speedCombo->setCurrentIndex( s.value("speed",   0).toInt());
     m_layoutCombo->setCurrentIndex(s.value("layout",  0).toInt());
 }
@@ -393,6 +409,7 @@ void MainWindow::onParamResetClicked()
     m_gravitySlider->setValue(350);
     m_elasticitySlider->setValue(50);
     m_biasSlider->setValue(50);
+    m_ballSizeSlider->setValue(100);
     m_speedCombo->setCurrentIndex(0);
     m_layoutCombo->setCurrentIndex(0);
 }
@@ -402,6 +419,13 @@ void MainWindow::onBiasChanged(int value)
     double p = value / 100.0;
     m_biasValueLabel->setText(QString("p = %1").arg(p, 0, 'f', 2));
     m_simWidget->setBiasProbability(p);
+}
+
+void MainWindow::onBallSizeChanged(int value)
+{
+    double factor = value / 100.0;
+    m_ballSizeValueLabel->setText(QString("%1x").arg(factor, 0, 'f', 2));
+    m_simWidget->setBallSize(factor);
 }
 
 void MainWindow::onSpeedChanged(int index)

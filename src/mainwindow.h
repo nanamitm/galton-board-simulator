@@ -28,6 +28,7 @@ private slots:
     void onGravityChanged(int value);
     void onElasticityChanged(int value);
     void onBiasChanged(int value);
+    void onBallSizeChanged(int value);
     void onSpeedChanged(int index);
     void onPegLayoutChanged(int index);
 
@@ -64,6 +65,9 @@ private:
 
     QSlider *m_biasSlider;
     QLabel *m_biasValueLabel;
+
+    QSlider *m_ballSizeSlider;
+    QLabel *m_ballSizeValueLabel;
 
     QComboBox *m_speedCombo;
     QComboBox *m_layoutCombo;
