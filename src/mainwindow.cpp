@@ -49,15 +49,19 @@ void MainWindow::applyResponsiveLayout()
     m_mainLayout->setDirection(narrow ? QBoxLayout::TopToBottom
                                       : QBoxLayout::LeftToRight);
     if (narrow) {
-        m_leftPanel->setMinimumWidth(0);
-        m_leftPanel->setMaximumWidth(QWIDGETSIZE_MAX);
+        // 300px 固定のままだと画面からはみ出すので、画面幅に合わせて詰める
+        m_leftPanel->setFixedWidth(qMax(220, width() - 24));
         m_panelScroll->setMinimumWidth(0);
         m_panelScroll->setMaximumWidth(QWIDGETSIZE_MAX);
         m_panelScroll->setMaximumHeight(qRound(height() * 0.45));
+        m_panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        m_mainLayout->setContentsMargins(6, 6, 6, 6);
     } else {
         m_leftPanel->setFixedWidth(300);
         m_panelScroll->setFixedWidth(316);       // スクロールバーの分
         m_panelScroll->setMaximumHeight(QWIDGETSIZE_MAX);
+        m_panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_mainLayout->setContentsMargins(15, 15, 15, 15);
     }
 }
 
