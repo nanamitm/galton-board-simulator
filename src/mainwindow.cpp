@@ -41,6 +41,31 @@ MainWindow::~MainWindow()
 #ifdef Q_OS_WASM
 // 幅が足りないときはパネルを上、シミュレーションを下に積み替える。
 // 300px 固定のパネルを横に並べたままだと、スマホでは描画領域が残らない。
+// パネルの文字サイズとスライダー最小幅をまとめて切り替える。
+// 幅が足りないときに縮めるためのもので、広い画面では元に戻す。
+void MainWindow::applyPanelScale(double fontScale, int sliderMinWidth)
+{
+    if (!m_leftPanel) return;
+
+    static const double basePointSize =
+        m_leftPanel->font().pointSizeF() > 0 ? m_leftPanel->font().pointSizeF() : 10.0;
+    QFont f = m_leftPanel->font();
+    f.setPointSizeF(basePointSize * fontScale);
+    m_leftPanel->setFont(f);
+
+    // 幅が足りないときはラベルをスライダーの上に折り返す。
+    // ラベル列が無くなる分、必要な最小幅が大きく下がる。
+    if (m_paramForm) {
+        m_paramForm->setRowWrapPolicy(fontScale < 1.0 ? QFormLayout::WrapAllRows
+                                                      : QFormLayout::DontWrapRows);
+    }
+
+    for (QSlider *slider : {m_rowSlider, m_dropRateSlider, m_gravitySlider,
+                            m_elasticitySlider, m_biasSlider, m_ballSizeSlider}) {
+        if (slider) slider->setMinimumWidth(sliderMinWidth);
+    }
+}
+
 void MainWindow::applyResponsiveLayout()
 {
     if (!m_mainLayout || !m_panelScroll || !m_leftPanel) return;
@@ -49,14 +74,19 @@ void MainWindow::applyResponsiveLayout()
     m_mainLayout->setDirection(narrow ? QBoxLayout::TopToBottom
                                       : QBoxLayout::LeftToRight);
     if (narrow) {
-        // 300px 固定のままだと画面からはみ出すので、画面幅に合わせて詰める
-        m_leftPanel->setFixedWidth(qMax(220, width() - 24));
+        // 300px 固定のままだと画面からはみ出すので、画面幅に合わせて詰める。
+        // それでも中身の最小幅が足りないので、パネルだけ文字を少し小さくし、
+        // スライダーの最小幅も詰めて横スクロールが出ないようにする。
+        applyPanelScale(0.85, 48);
+        // 外側マージン(12) と縦スクロールバー(~20) の分を引く
+        m_leftPanel->setFixedWidth(qMax(200, width() - 44));
         m_panelScroll->setMinimumWidth(0);
         m_panelScroll->setMaximumWidth(QWIDGETSIZE_MAX);
         m_panelScroll->setMaximumHeight(qRound(height() * 0.45));
         m_panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         m_mainLayout->setContentsMargins(6, 6, 6, 6);
     } else {
+        applyPanelScale(1.0, 84);
         m_leftPanel->setFixedWidth(300);
         m_panelScroll->setFixedWidth(316);       // スクロールバーの分
         m_panelScroll->setMaximumHeight(QWIDGETSIZE_MAX);
@@ -111,6 +141,9 @@ void MainWindow::setupUI()
     // パラメータ設定グループ
     QGroupBox *paramGroup = new QGroupBox("物理・環境パラメータ", leftPanel);
     QFormLayout *paramLayout = new QFormLayout(paramGroup);
+#ifdef Q_OS_WASM
+    m_paramForm = paramLayout;
+#endif
     paramLayout->setVerticalSpacing(12);
     paramLayout->setHorizontalSpacing(10);
 

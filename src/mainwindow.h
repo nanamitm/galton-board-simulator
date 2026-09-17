@@ -46,10 +46,12 @@ private:
 #ifdef Q_OS_WASM
     // 画面が狭いときはパネルと描画を縦に積む
     void applyResponsiveLayout();
+    void applyPanelScale(double fontScale, int sliderMinWidth);
 
     class QBoxLayout *m_mainLayout   = nullptr;
     QWidget          *m_leftPanel    = nullptr;
     class QScrollArea *m_panelScroll = nullptr;
+    class QFormLayout *m_paramForm   = nullptr;
 #endif
     void applyTheme();
     void saveParams();
