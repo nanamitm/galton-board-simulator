@@ -1,5 +1,5 @@
 #include "mainwindow.h"
-#include <QSettings>
+#include "appsettings.h"
 #include <QTimer>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -10,6 +10,10 @@
 #include <QtMath>
 #include <QStyle>
 #include <QFontDatabase>
+#include <QScrollArea>
+#include <QFrame>
+#include <QBoxLayout>
+#include <QResizeEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -34,6 +38,36 @@ MainWindow::~MainWindow()
 {
 }
 
+#ifdef Q_OS_WASM
+// 幅が足りないときはパネルを上、シミュレーションを下に積み替える。
+// 300px 固定のパネルを横に並べたままだと、スマホでは描画領域が残らない。
+void MainWindow::applyResponsiveLayout()
+{
+    if (!m_mainLayout || !m_panelScroll || !m_leftPanel) return;
+
+    const bool narrow = width() < 720;
+    m_mainLayout->setDirection(narrow ? QBoxLayout::TopToBottom
+                                      : QBoxLayout::LeftToRight);
+    if (narrow) {
+        m_leftPanel->setMinimumWidth(0);
+        m_leftPanel->setMaximumWidth(QWIDGETSIZE_MAX);
+        m_panelScroll->setMinimumWidth(0);
+        m_panelScroll->setMaximumWidth(QWIDGETSIZE_MAX);
+        m_panelScroll->setMaximumHeight(qRound(height() * 0.45));
+    } else {
+        m_leftPanel->setFixedWidth(300);
+        m_panelScroll->setFixedWidth(316);       // スクロールバーの分
+        m_panelScroll->setMaximumHeight(QWIDGETSIZE_MAX);
+    }
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    applyResponsiveLayout();
+}
+#endif
+
 void MainWindow::setupUI()
 {
     // メインセントラルウィジェットと水平レイアウト
@@ -46,6 +80,10 @@ void MainWindow::setupUI()
     // --- 左側: コントロールパネル ---
     QWidget *leftPanel = new QWidget(this);
     leftPanel->setFixedWidth(300);
+#ifdef Q_OS_WASM
+    m_leftPanel = leftPanel;
+    m_mainLayout = mainLayout;
+#endif
     QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(15);
@@ -219,7 +257,20 @@ void MainWindow::setupUI()
     connect(m_simWidget, &SimulationWidget::distributionChanged, this, &MainWindow::updateStatistics);
 
     // レイアウトの組み立て
+#ifdef Q_OS_WASM
+    // ブラウザの表示領域は狭いことがあるので、
+    // コントロールパネルはスクロールできるようにする。
+    m_panelScroll = new QScrollArea(this);
+    m_panelScroll->setWidget(leftPanel);
+    m_panelScroll->setWidgetResizable(true);
+    m_panelScroll->setFrameShape(QFrame::NoFrame);
+    m_panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_panelScroll->viewport()->setAutoFillBackground(false);
+    m_panelScroll->setStyleSheet("background: transparent;");
+    mainLayout->addWidget(m_panelScroll);
+#else
     mainLayout->addWidget(leftPanel);
+#endif
     mainLayout->addWidget(m_simWidget, 1); // SimulationWidget が右側全体で伸縮
 }
 
@@ -369,7 +420,7 @@ void MainWindow::onElasticityChanged(int value)
 
 void MainWindow::saveParams()
 {
-    QSettings s("GaltonBoard", "Simulator");
+    AppSettings s;
     s.setValue("rowCount",   m_rowSlider->value());
     s.setValue("dropRate",   m_dropRateSlider->value());
     s.setValue("gravity",    m_gravitySlider->value());
@@ -382,7 +433,7 @@ void MainWindow::saveParams()
 
 void MainWindow::loadParams()
 {
-    QSettings s("GaltonBoard", "Simulator");
+    AppSettings s;
     if (!s.contains("rowCount")) return;
 
     m_rowSlider->setValue(       s.value("rowCount",   10).toInt());

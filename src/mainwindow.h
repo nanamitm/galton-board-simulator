@@ -36,8 +36,21 @@ private slots:
     void updateStatistics(const QVector<int> &slotCounts);
     void updateBallCountLabel(int count);
 
+protected:
+#ifdef Q_OS_WASM
+    void resizeEvent(QResizeEvent *event) override;
+#endif
+
 private:
     void setupUI();
+#ifdef Q_OS_WASM
+    // 画面が狭いときはパネルと描画を縦に積む
+    void applyResponsiveLayout();
+
+    class QBoxLayout *m_mainLayout   = nullptr;
+    QWidget          *m_leftPanel    = nullptr;
+    class QScrollArea *m_panelScroll = nullptr;
+#endif
     void applyTheme();
     void saveParams();
     void loadParams();

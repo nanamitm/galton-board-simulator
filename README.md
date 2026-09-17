@@ -24,6 +24,49 @@
 | 右確率 p | 1% 〜 99% | 50% |
 | ボールサイズ | 0.50x 〜 2.00x | 1.00x |
 
+## Web 版（Qt for WebAssembly）
+
+デスクトップ版と同じ Qt アプリを WebAssembly にビルドして GitHub Pages で公開しています：
+**https://nanamitm.github.io/galton-board-simulator/**
+
+- 機能はデスクトップ版と同じ
+- パラメータはブラウザの `localStorage` に保存されます（「現在値を保存」で保存）
+- 表示領域が狭いときはコントロールパネルを上、シミュレーションを下に積み替えます
+- 初回ロードは gzip 後で約 5 MB
+
+スレッドを使っていないためシングルスレッド版 Qt でビルドでき、`SharedArrayBuffer`
+（＝COOP/COEP ヘッダ）は不要です。
+
+**ビルドに必要なもの**
+- Qt 6.11.1 の WebAssembly 版（`wasm_singlethread`）＋同バージョンのホスト Qt
+- Emscripten 4.0.7（この Qt がビルドに使ったバージョン。他だと拒否されます）
+
+```bash
+source /path/to/emsdk/emsdk_env.sh
+/path/to/Qt/6.11.1/wasm_singlethread/bin/qt-cmake -S . -B build-wasm   -DCMAKE_BUILD_TYPE=Release   -DQT_HOST_PATH=/path/to/Qt/6.11.1/gcc_64
+cmake --build build-wasm
+python -m http.server 8080 --directory build-wasm   # /index.html を開く
+```
+
+`.github/workflows/pages.yml` が `master` への push でビルドとデプロイを行います。
+公開物は `wasm/make-dist.py` が組み立て、ファイル名に内容ハッシュを付けます
+（GitHub Pages が `Cache-Control: max-age=600` を返すため、新しい `index.html`
+と古い wasm が混ざるのを防ぐため）。
+
+### 日本語フォント
+
+Qt for WebAssembly は DejaVu しか同梱しておらず CJK が豆腐になるため、
+`resources/fonts/NotoSansJP-subset.ttf`（UI で使う約 435 文字だけに絞った
+Noto Sans JP Regular・約 89 KB、SIL Open Font License 1.1）を埋め込んでいます。
+日本語の文言を追加したら再生成してください：
+
+```bash
+python -m pip install fonttools
+python tools/subset_font.py path/to/NotoSansJP.ttf
+```
+
+---
+
 ## 動作環境
 
 - Windows 10 / 11
